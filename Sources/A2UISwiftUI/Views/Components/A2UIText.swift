@@ -41,9 +41,19 @@ struct A2UIText: View {
                 let variant = props.variant
                 let override = style.textStyles[variant?.rawValue ?? "body"]
 
-                styledText(resolved, variant: variant, override: override)
-                    .a2uiAccessibility(node.accessibility, dataContext: dc)
-                    .padding(style.leafMargin)
+                // LOCAL DEVIATION (poc0, 2026-11-23): a value that resolved
+                // to an EMPTY/whitespace/punctuation-only string (payloads do
+                // carry bare "-" locations) renders NOTHING — not an
+                // empty line. The clause uses sub:"" for "no location";
+                // without this the row reserves a caption line of air.
+                // Unresolved bindings (streaming skeletons) unchanged.
+                if !resolved.contains(where: { $0.isLetter || $0.isNumber }) {
+                    EmptyView()
+                } else {
+                    styledText(resolved, variant: variant, override: override)
+                        .a2uiAccessibility(node.accessibility, dataContext: dc)
+                        .padding(style.leafMargin)
+                }
             }
         }
     }
@@ -75,6 +85,16 @@ struct A2UIText: View {
             .font(override?.font ?? defaultFont(for: variant))
             .fontWeight(weight)
             .foregroundColor(color)
+            // LOCAL DEVIATION (poc0, 2026-11-24 11:46): long titles
+            // intermittently truncated to ONE line inside our List rows —
+            // which pill got hit moved between renders of identical data
+            // (field 11:31 vs 11:45), i.e. the row was typeset against a
+            // stale one-line height proposal from the placeholder pass
+            // (A2UIBubble builds its view model in onAppear). fixedSize
+            // vertical makes every Text commit the height IT needs for
+            // the width it is given, so the row can never under-reserve.
+            // Horizontal stays flexible: wrapping is exactly what we want.
+            .fixedSize(horizontal: false, vertical: true)
             .accessibilityAddTraits(level != nil ? .isHeader : [])
             .accessibilityHeading(level ?? .unspecified)
     }
